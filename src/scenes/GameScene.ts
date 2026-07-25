@@ -7,10 +7,17 @@ const OFFSET_X = 20;
 const OFFSET_Y = 40;
 const WALL_COLOR = 0x2d3436;
 const GRID_COLOR = 0x16213e;
+const SNAKE_HEAD_COLOR = 0x00cec9;
+const SNAKE_BODY_COLOR = 0x6c5ce7;
+const FOOD_COLOR = 0xff7675;
 
 interface Point {
   x: number;
   y: number;
+}
+
+function samePoint(a: Point, b: Point) {
+  return a.x === b.x && a.y === b.y;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -58,11 +65,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startGame() {
-    this.snake = [
-      { x: 5, y: Math.floor(ROWS / 2) },
-      { x: 4, y: Math.floor(ROWS / 2) },
-      { x: 3, y: Math.floor(ROWS / 2) },
-    ];
+    const midRow = Math.floor(ROWS / 2);
+    this.snake = [5, 4, 3].map((x) => ({ x, y: midRow }));
     this.direction = { x: 1, y: 0 };
     this.nextDirection = { x: 1, y: 0 };
     this.alive = true;
@@ -91,15 +95,35 @@ export class GameScene extends Phaser.Scene {
     if (!this.alive) this.startGame();
   }
 
+  private gridX(col: number) {
+    return OFFSET_X + col * CELL;
+  }
+
+  private gridY(row: number) {
+    return OFFSET_Y + row * CELL;
+  }
+
+  private isOutOfBounds(p: Point) {
+    return p.x < 0 || p.x >= COLS || p.y < 0 || p.y >= ROWS;
+  }
+
+  private hitsSnake(p: Point) {
+    return this.snake.some((s) => samePoint(s, p));
+  }
+
   update(_time: number, delta: number) {
     this.handleInput();
     if (!this.alive) return;
 
     this.moveTimer += delta;
-    if (this.moveTimer < this.moveInterval) return;
-    this.moveTimer = 0;
+    if (this.moveTimer >= this.moveInterval) {
+      this.moveTimer = 0;
+      this.moveSnake();
+    }
+  }
 
-    this.direction = { ...this.nextDirection };
+  private moveSnake() {
+    this.direction = this.nextDirection;
 
     const head = this.snake[0];
     const newHead: Point = {
@@ -107,19 +131,14 @@ export class GameScene extends Phaser.Scene {
       y: head.y + this.direction.y,
     };
 
-    if (newHead.x < 0 || newHead.x >= COLS || newHead.y < 0 || newHead.y >= ROWS) {
-      this.die();
-      return;
-    }
-
-    if (this.snake.some((s) => s.x === newHead.x && s.y === newHead.y)) {
+    if (this.isOutOfBounds(newHead) || this.hitsSnake(newHead)) {
       this.die();
       return;
     }
 
     this.snake.unshift(newHead);
 
-    if (newHead.x === this.food.x && newHead.y === this.food.y) {
+    if (samePoint(newHead, this.food)) {
       this.score++;
       this.scoreText.setText(`Score: ${this.score}`);
       this.spawnFood();
@@ -150,42 +169,49 @@ export class GameScene extends Phaser.Scene {
   }
 
   private draw() {
+    this.graphics.clear();
+    this.drawBorder();
+    this.drawGrid();
+
+    const alpha = this.alive ? 1 : 0.4;
+    this.drawSnake(alpha);
+    this.drawFood(alpha);
+  }
+
+  private drawBorder() {
     const g = this.graphics;
-    g.clear();
-
-    // Border
     g.lineStyle(2, WALL_COLOR, 1);
-    g.strokeRect(
-      OFFSET_X - 2,
-      OFFSET_Y - 2,
-      COLS * CELL + 4,
-      ROWS * CELL + 4
-    );
+    g.strokeRect(OFFSET_X - 2, OFFSET_Y - 2, COLS * CELL + 4, ROWS * CELL + 4);
+  }
 
-    // Grid lines (subtle)
+  private drawGrid() {
+    const g = this.graphics;
+    g.lineStyle(1, GRID_COLOR, 0.3);
     for (let x = 0; x <= COLS; x++) {
       const px = OFFSET_X + x * CELL;
-      g.lineStyle(1, GRID_COLOR, 0.3);
       g.lineBetween(px, OFFSET_Y, px, OFFSET_Y + ROWS * CELL);
     }
     for (let y = 0; y <= ROWS; y++) {
       const py = OFFSET_Y + y * CELL;
-      g.lineStyle(1, GRID_COLOR, 0.3);
       g.lineBetween(OFFSET_X, py, OFFSET_X + COLS * CELL, py);
     }
+  }
 
-    // Snake
+  private drawSnake(alpha: number) {
+    const g = this.graphics;
     this.snake.forEach((seg, i) => {
-      const px = OFFSET_X + seg.x * CELL;
-      const py = OFFSET_Y + seg.y * CELL;
-      g.fillStyle(i === 0 ? 0x00cec9 : 0x6c5ce7, this.alive ? 1 : 0.4);
-      g.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
+      g.fillStyle(i === 0 ? SNAKE_HEAD_COLOR : SNAKE_BODY_COLOR, alpha);
+      g.fillRect(this.gridX(seg.x) + 1, this.gridY(seg.y) + 1, CELL - 2, CELL - 2);
     });
+  }
 
-    // Food
-    const fx = OFFSET_X + this.food.x * CELL + CELL / 2;
-    const fy = OFFSET_Y + this.food.y * CELL + CELL / 2;
-    g.fillStyle(0xff7675, this.alive ? 1 : 0.4);
-    g.fillCircle(fx, fy, CELL / 2 - 2);
+  private drawFood(alpha: number) {
+    const g = this.graphics;
+    g.fillStyle(FOOD_COLOR, alpha);
+    g.fillCircle(
+      this.gridX(this.food.x) + CELL / 2,
+      this.gridY(this.food.y) + CELL / 2,
+      CELL / 2 - 2
+    );
   }
 }
