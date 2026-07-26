@@ -12,25 +12,14 @@ import {
   FOOD_COLOR,
   CANVAS_WIDTH,
 } from "../config";
-
-interface Point {
-  x: number;
-  y: number;
-}
-
-function samePoint(a: Point, b: Point) {
-  return a.x === b.x && a.y === b.y;
-}
+import { SnakeGame, Point } from "../game/engine";
 
 export class GameScene extends Phaser.Scene {
-  private snake: Point[] = [];
-  private food: Point | null = null;
-  private direction!: Point;
-  private nextDirection!: Point;
+  private engine!: SnakeGame;
+  private nextDirection: Point = { x: 1, y: 0 };
   private moveTimer = 0;
   private moveInterval = 130;
-  private alive = false;
-  private score = 0;
+
   private scoreText!: Phaser.GameObjects.Text;
   private bestScore = 0;
   private bestScoreText!: Phaser.GameObjects.Text;
@@ -48,6 +37,7 @@ export class GameScene extends Phaser.Scene {
 
     this.graphics = this.add.graphics();
     this.cursors = kb.createCursorKeys();
+    this.engine = new SnakeGame({ cols: COLS, rows: ROWS });
 
     this.scoreText = this.add.text(OFFSET_X, 10, "Score: 0", {
       fontFamily: "monospace",
@@ -92,94 +82,45 @@ export class GameScene extends Phaser.Scene {
   }
 
   private startGame() {
-    const midRow = Math.floor(ROWS / 2);
-    this.snake = [5, 4, 3].map((x) => ({ x, y: midRow }));
-    this.direction = { x: 1, y: 0 };
+    this.engine.start();
     this.nextDirection = { x: 1, y: 0 };
-    this.alive = true;
-    this.score = 0;
     this.moveTimer = 0;
-    this.scoreText.setText(`Score: ${this.score}`);
+    this.scoreText.setText("Score: 0");
     this.gameOverText.setVisible(false);
-    this.spawnFood();
     this.draw();
   }
 
-  private spawnFood() {
-    const free: Point[] = [];
-    for (let x = 0; x < COLS; x++) {
-      for (let y = 0; y < ROWS; y++) {
-        if (!this.hitsSnake({ x, y })) free.push({ x, y });
-      }
-    }
-    if (free.length === 0) {
-      this.food = null;
-      this.win();
-      return;
-    }
-    this.food = free[Math.floor(Math.random() * free.length)];
-  }
-
   private restartIfDead() {
-    if (!this.alive) this.startGame();
-  }
-
-  private gridX(col: number) {
-    return OFFSET_X + col * CELL;
-  }
-
-  private gridY(row: number) {
-    return OFFSET_Y + row * CELL;
-  }
-
-  private isOutOfBounds(p: Point) {
-    return p.x < 0 || p.x >= COLS || p.y < 0 || p.y >= ROWS;
-  }
-
-  private hitsSnake(p: Point) {
-    return this.snake.some((s) => samePoint(s, p));
+    if (!this.engine.getState().alive) this.startGame();
   }
 
   update(_time: number, delta: number) {
     this.handleInput();
-    if (!this.alive) return;
+    const state = this.engine.getState();
+    if (!state.alive) return;
 
     this.moveTimer += delta;
     if (this.moveTimer >= this.moveInterval) {
       this.moveTimer = 0;
-      this.moveSnake();
+      const result = this.engine.step(this.nextDirection);
+      const newState = this.engine.getState();
+      this.scoreText.setText(`Score: ${newState.score}`);
+
+      if (result.won) {
+        this.win();
+      } else if (result.died) {
+        this.die();
+      } else {
+        this.draw();
+      }
     }
-  }
-
-  private moveSnake() {
-    this.direction = this.nextDirection;
-
-    const head = this.snake[0];
-    const newHead: Point = {
-      x: head.x + this.direction.x,
-      y: head.y + this.direction.y,
-    };
-
-    if (this.isOutOfBounds(newHead) || this.hitsSnake(newHead)) {
-      this.die();
-      return;
-    }
-
-    this.snake.unshift(newHead);
-
-    if (this.food && samePoint(newHead, this.food)) {
-      this.score++;
-      this.scoreText.setText(`Score: ${this.score}`);
-      this.spawnFood();
-    } else {
-      this.snake.pop();
-    }
-
-    this.draw();
   }
 
   private handleInput() {
-    const d = this.direction;
+    const state = this.engine.getState();
+    if (!state.alive) return;
+    const d = state.direction;
+
     if (this.cursors.left.isDown && d.x !== 1) {
       this.nextDirection = { x: -1, y: 0 };
     } else if (this.cursors.right.isDown && d.x !== -1) {
@@ -192,7 +133,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private die() {
-    this.alive = false;
     this.persistBestScore();
     this.gameOverText.setText("Game Over\nClick or press Space to restart");
     this.gameOverText.setVisible(true);
@@ -200,7 +140,6 @@ export class GameScene extends Phaser.Scene {
   }
 
   private win() {
-    this.alive = false;
     this.persistBestScore();
     this.gameOverText.setText("You Win!\nClick or press Space to restart");
     this.gameOverText.setVisible(true);
@@ -208,8 +147,9 @@ export class GameScene extends Phaser.Scene {
   }
 
   private persistBestScore() {
-    if (this.score > this.bestScore) {
-      this.bestScore = this.score;
+    const score = this.engine.getState().score;
+    if (score > this.bestScore) {
+      this.bestScore = score;
       this.bestScoreText.setText(`Best: ${this.bestScore}`);
       try {
         localStorage.setItem("snakey-best-score", String(this.bestScore));
@@ -219,14 +159,17 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
+  /* ──────────── Rendering ──────────── */
+
   private draw() {
+    const state = this.engine.getState();
     this.graphics.clear();
     this.drawBorder();
     this.drawGrid();
 
-    const alpha = this.alive ? 1 : 0.4;
-    this.drawSnake(alpha);
-    this.drawFood(alpha);
+    const alpha = state.alive ? 1 : 0.4;
+    this.drawSnake(state.snake, alpha);
+    this.drawFood(state.food, alpha);
   }
 
   private drawBorder() {
@@ -248,22 +191,35 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private drawSnake(alpha: number) {
+  private gridX(col: number) {
+    return OFFSET_X + col * CELL;
+  }
+
+  private gridY(row: number) {
+    return OFFSET_Y + row * CELL;
+  }
+
+  private drawSnake(snake: Point[], alpha: number) {
     const g = this.graphics;
-    this.snake.forEach((seg, i) => {
+    snake.forEach((seg, i) => {
       g.fillStyle(i === 0 ? SNAKE_HEAD_COLOR : SNAKE_BODY_COLOR, alpha);
-      g.fillRect(this.gridX(seg.x) + 1, this.gridY(seg.y) + 1, CELL - 2, CELL - 2);
+      g.fillRect(
+        this.gridX(seg.x) + 1,
+        this.gridY(seg.y) + 1,
+        CELL - 2,
+        CELL - 2,
+      );
     });
   }
 
-  private drawFood(alpha: number) {
-    if (!this.food) return;
+  private drawFood(food: Point | null, alpha: number) {
+    if (!food) return;
     const g = this.graphics;
     g.fillStyle(FOOD_COLOR, alpha);
     g.fillCircle(
-      this.gridX(this.food.x) + CELL / 2,
-      this.gridY(this.food.y) + CELL / 2,
-      CELL / 2 - 2
+      this.gridX(food.x) + CELL / 2,
+      this.gridY(food.y) + CELL / 2,
+      CELL / 2 - 2,
     );
   }
 }
