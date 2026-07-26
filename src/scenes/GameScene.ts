@@ -14,6 +14,7 @@ import {
 } from "../config";
 import { SnakeGame, Point } from "../game/engine";
 import { getAIDirection, AIDebugInfo } from "../ai/demo-controller";
+import { TouchControls } from "../input/TouchControls";
 
 export class GameScene extends Phaser.Scene {
   private engine!: SnakeGame;
@@ -28,6 +29,7 @@ export class GameScene extends Phaser.Scene {
   private gameOverText!: Phaser.GameObjects.Text;
   private graphics!: Phaser.GameObjects.Graphics;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private touchControls?: TouchControls;
 
   // Juice: dedicated GameObjects for head + food
   private headRect!: Phaser.GameObjects.Rectangle;
@@ -122,7 +124,15 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setVisible(false);
 
-    this.input.on("pointerdown", () => this.restartIfDead());
+    // Touch: tap to restart in both modes; swipe + D-pad steer in normal mode only.
+    const isCoarsePointer =
+      typeof window !== "undefined" &&
+      window.matchMedia("(pointer: coarse)").matches;
+    this.touchControls = new TouchControls(this, {
+      onSwipe: this.mode === "normal" ? (dir: Point) => this.enqueue(dir) : null,
+      onTap: () => this.restartIfDead(),
+      enableDPad: this.mode === "normal" && isCoarsePointer,
+    });
     kb.on("keydown-SPACE", () => this.restartIfDead());
     kb.on("keydown-M", () => this.scene.start("MenuScene"));
     if (this.mode === "demo") {

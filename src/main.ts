@@ -10,6 +10,12 @@ const config: Phaser.Types.Core.GameConfig = {
   backgroundColor: BACKGROUND_COLOR,
   parent: document.body,
   scene: [MenuScene, GameScene],
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    autoRound: true,
+    expandParent: false,
+  },
 };
 
 new Phaser.Game(config);

@@ -3,8 +3,6 @@ import {
   CANVAS_WIDTH,
   CANVAS_HEIGHT,
   BACKGROUND_COLOR,
-  SNAKE_HEAD_COLOR,
-  SNAKE_BODY_COLOR,
   FOOD_COLOR,
   CELL,
   OFFSET_X,
@@ -23,7 +21,6 @@ const CARDS_CY = 280;
 
 const COLOR_CYAN = 0x00cec9;
 const COLOR_PURPLE = 0x6c5ce7;
-const COLOR_RED = 0xff7675;
 
 const MUTED_TEXT = "#636e72";
 const BRIGHT_MUTED = "#b2bec3";
@@ -31,10 +28,6 @@ const ACCENT_CYAN_STR = "#00cec9";
 const ACCENT_PURPLE_STR = "#6c5ce7";
 
 /* ──────────── Helpers ──────────── */
-
-function hex(n: number): string {
-  return "#" + n.toString(16).padStart(6, "0");
-}
 
 /* ================================================================
    MENU SCENE
@@ -88,7 +81,7 @@ export class MenuScene extends Phaser.Scene {
       LEFT_CARD_CX,
       CARDS_CY,
       "NORMAL",
-      "Play with arrow keys",
+      "Tap or use arrow keys",
       COLOR_CYAN,
       ACCENT_CYAN_STR,
       () => this.scene.start("GameScene", { mode: "normal" }),
