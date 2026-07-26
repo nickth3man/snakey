@@ -36,22 +36,24 @@ describe("getAIDirection", () => {
   }
 
   it("returns tier1 when food is reachable and there is ample space", () => {
-    // 5×5 board, plenty of room for a short snake
-    const game = new SnakeGame({ cols: 5, rows: 5 });
-    game.start();
+    // Constructed state: 10×10 board, snake at center moving right,
+    // food two cells ahead. Plenty of room and a clear path → tier1.
+    // (Replaces the previous moveToward-based version that flaked because
+    // random food spawning on a 5×5 board could starve tier1 of open space.)
+    const state = {
+      snake: [
+        { x: 5, y: 5 },
+        { x: 4, y: 5 },
+        { x: 3, y: 5 },
+      ],
+      food: { x: 7, y: 5 },
+      direction: { x: 1, y: 0 },
+      score: 0,
+      alive: true,
+      won: false,
+    };
 
-    // Place food manually by eating the spawned food and then checking
-    const state = game.getState();
-    const food = state.food!;
-    expect(food).not.toBeNull();
-
-    // Move the snake toward the food so we can test a live state
-    moveToward(game, food);
-    const liveState = game.getState();
-    expect(liveState.alive).toBe(true);
-
-    const decision: AIDecision = getAIDirection(liveState, 5, 5);
-    // On a fresh board with short snake + food, we should get tier1
+    const decision: AIDecision = getAIDirection(state, 10, 10);
     expect(decision.debug.tier).toBe("tier1");
   });
 

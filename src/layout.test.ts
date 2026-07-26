@@ -29,7 +29,8 @@ describe("computeLayout", () => {
     });
     expect(L.orientation).toBe("landscape");
     expect(L.footerH).toBe(FOOTER_H_TOUCH_LANDSCAPE);
-    expect(FOOTER_H_TOUCH_LANDSCAPE).toBeLessThan(FOOTER_H_TOUCH_PORTRAIT);
+    expect(FOOTER_H_TOUCH_PORTRAIT).toBe(0);
+    expect(FOOTER_H_TOUCH_LANDSCAPE).toBeGreaterThan(FOOTER_H_TOUCH_PORTRAIT);
   });
 
   it("clamps to CELL_MIN on absurdly small viewports", () => {

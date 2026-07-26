@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { COLS, ROWS, WALL_COLOR, GRID_COLOR, SNAKE_HEAD_COLOR, SNAKE_BODY_COLOR, FOOD_COLOR } from "../config";
+import { COLS, ROWS, COLS_PORTRAIT, ROWS_PORTRAIT, WALL_COLOR, GRID_COLOR, SNAKE_HEAD_COLOR, SNAKE_BODY_COLOR, FOOD_COLOR, SNAKE_EYE_COLOR } from "../config";
 import { SnakeGame, Point } from "../game/engine";
 import { getAIDirection, AIDebugInfo } from "../ai/demo-controller";
 import { TouchControls } from "../input/TouchControls";
@@ -21,12 +21,20 @@ export class GameScene extends Phaser.Scene {
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
   private headRect!: Phaser.GameObjects.Rectangle;
+  private headGlow!: Phaser.GameObjects.Rectangle;
+  private eyeLeft!: Phaser.GameObjects.Arc;
+  private eyeRight!: Phaser.GameObjects.Arc;
   private foodCircle!: Phaser.GameObjects.Arc;
   private lastFoodKey: string | null = null;
+  private lastDisplayedScore = 0;
 
   private aiDebug: AIDebugInfo | null = null;
   private showAIDebug = false;
-  private tierBadge!: Phaser.GameObjects.Text;
+  private tierBadge!: Phaser.GameObjects.Container;
+  private tierBadgeText!: Phaser.GameObjects.Text;
+  private tierBadgePill!: Phaser.GameObjects.Graphics;
+  private lastTier: string | null = null;
+  private tierToastTimer: Phaser.Time.TimerEvent | null = null;
   private debugGraphics!: Phaser.GameObjects.Graphics;
 
   private touchControls?: TouchControls;
@@ -49,10 +57,14 @@ export class GameScene extends Phaser.Scene {
       typeof window !== "undefined" &&
       window.matchMedia("(pointer: coarse)").matches;
 
-    this.layout = computeLayout(this.scale.width, this.scale.height, {
-      cols: COLS,
-      rows: ROWS,
-      enableDPad: this.mode === "normal" && isCoarsePointer,
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const isPortrait = h > w;
+
+    this.layout = computeLayout(w, h, {
+      cols: isPortrait ? COLS_PORTRAIT : COLS,
+      rows: isPortrait ? ROWS_PORTRAIT : ROWS,
+      enableDPad: this.mode === "normal" && isCoarsePointer && !isPortrait,
       hasDebugButton: this.mode === "demo",
     });
 
@@ -67,10 +79,30 @@ export class GameScene extends Phaser.Scene {
       .setVisible(false)
       .setDepth(5);
     this.headRect = this.add
-      .rectangle(0, 0, L.cell - 2, L.cell - 2, SNAKE_HEAD_COLOR)
+      .rectangle(0, 0, L.cell - 1, L.cell - 1, SNAKE_HEAD_COLOR)
       .setOrigin(0.5)
       .setVisible(false)
       .setDepth(10);
+
+    // Head glow — slightly larger low-alpha rectangle behind the head
+    this.headGlow = this.add
+      .rectangle(0, 0, L.cell + 6, L.cell + 6, SNAKE_HEAD_COLOR, 0.18)
+      .setOrigin(0.5)
+      .setVisible(false)
+      .setDepth(9);
+
+    // Eyes — two small dots that sit on the head
+    const eyeRadius = Math.max(1.5, L.cell * 0.12);
+    this.eyeLeft = this.add
+      .circle(0, 0, eyeRadius, SNAKE_EYE_COLOR)
+      .setOrigin(0.5)
+      .setVisible(false)
+      .setDepth(11);
+    this.eyeRight = this.add
+      .circle(0, 0, eyeRadius, SNAKE_EYE_COLOR)
+      .setOrigin(0.5)
+      .setVisible(false)
+      .setDepth(11);
 
     // One-time particle texture
     if (!this.textures.exists("particle-food")) {
@@ -88,15 +120,16 @@ export class GameScene extends Phaser.Scene {
 
     // Menu button (top-left, always visible)
     this.menuButton = this.add
-      .text(L.menuBtnX, L.menuBtnY, "\u2261 Menu", {
+      .text(L.menuBtnX, L.menuBtnY, "☰", {
         fontFamily: "monospace",
-        fontSize: "16px",
+        fontSize: "20px",
+        fontStyle: "bold",
         color: "#00cec9",
       })
       .setOrigin(0, 0.5)
       .setDepth(20)
       .setInteractive({
-        hitArea: new Phaser.Geom.Rectangle(-4, -18, 80, 36),
+        hitArea: new Phaser.Geom.Rectangle(-12, -22, 44, 44),
         hitAreaCallback: Phaser.Geom.Rectangle.Contains,
         useHandCursor: true,
       });
@@ -105,12 +138,16 @@ export class GameScene extends Phaser.Scene {
       kb.on("keydown-M", () => this.scene.start("MenuScene"));
     }
 
-    // Score (top area, right of menu button)
-    this.scoreText = this.add.text(L.scoreX, L.scoreY, "Score: 0", {
-      fontFamily: "monospace",
-      fontSize: "18px",
-      color: "#e0e0e0",
-    });
+    // Score (top area, right of menu button) — the hero stat
+    this.scoreText = this.add
+      .text(L.scoreX, L.scoreY, "Score: 0", {
+        fontFamily: "monospace",
+        fontSize: "18px",
+        color: "#ffeaa7",
+        backgroundColor: "#2d3436",
+        padding: { x: 10, y: 4 },
+      })
+      .setDepth(20);
 
     let savedBest: number | null = null;
     try {
@@ -127,17 +164,32 @@ export class GameScene extends Phaser.Scene {
       .text(
         L.bestX,
         L.bestY,
-        savedBest !== null ? `Best: ${savedBest}` : "Best: \u2014",
-        { fontFamily: "monospace", fontSize: "18px", color: "#e0e0e0" },
+        savedBest !== null ? `Best: ${savedBest}` : "Best: —",
+        {
+          fontFamily: "monospace",
+          fontSize: "18px",
+          color: "#e0e0e0",
+          backgroundColor: "#2d3436",
+          padding: { x: 10, y: 4 },
+        },
       )
-      .setOrigin(1, 0);
+      .setOrigin(1, 0)
+      .setDepth(20);
 
-    this.tierBadge = this.add
-      .text(L.offsetX, 36, "", {
+    this.tierBadgePill = this.add.graphics();
+    this.tierBadgeText = this.add
+      .text(0, 0, "", {
         fontFamily: "monospace",
         fontSize: "14px",
         color: "#00cec9",
       })
+      .setOrigin(0.5);
+    this.tierBadge = this.add
+      .container(L.gameOverX, L.headerH + 4, [
+        this.tierBadgePill,
+        this.tierBadgeText,
+      ])
+      .setAlpha(0)
       .setVisible(false)
       .setDepth(20);
 
@@ -149,7 +201,8 @@ export class GameScene extends Phaser.Scene {
         align: "center",
       })
       .setOrigin(0.5)
-      .setVisible(false);
+      .setVisible(false)
+      .setDepth(20);
 
     // Debug toggle button (demo mode only)
     if (this.mode === "demo") {
@@ -162,7 +215,7 @@ export class GameScene extends Phaser.Scene {
         .setOrigin(1, 0.5)
         .setDepth(20)
         .setInteractive({
-          hitArea: new Phaser.Geom.Rectangle(-50, -18, 100, 36),
+          hitArea: new Phaser.Geom.Rectangle(-50, -22, 100, 44),
           hitAreaCallback: Phaser.Geom.Rectangle.Contains,
           useHandCursor: true,
         });
@@ -176,7 +229,7 @@ export class GameScene extends Phaser.Scene {
     this.touchControls = new TouchControls(this, {
       onSwipe: this.mode === "normal" ? (dir: Point) => this.enqueue(dir) : null,
       onTap: () => this.restartIfDead(),
-      enableDPad: this.mode === "normal" && isCoarsePointer,
+      enableDPad: this.mode === "normal" && isCoarsePointer && !isPortrait,
       initialLayout: this.layout,
     });
 
@@ -193,7 +246,11 @@ export class GameScene extends Phaser.Scene {
     this.directionQueue = [];
     this.moveTimer = 0;
     this.scoreText.setText("Score: 0");
-    this.gameOverText.setVisible(false);
+    this.lastDisplayedScore = 0;
+    this.tweens.killTweensOf(this.scoreText);
+    this.scoreText.setScale(1);
+    this.tweens.killTweensOf(this.gameOverText);
+    this.gameOverText.setAlpha(1).setScale(1).setVisible(false);
     this.aiDebug = null;
     this.showAIDebug = false;
     this.tierBadge?.setVisible(false);
@@ -201,8 +258,11 @@ export class GameScene extends Phaser.Scene {
     this.debugButton?.setText("AI Vision: off");
     this.debugButton?.setColor("#b2bec3");
     // Reset juice state
-    this.tweens.killTweensOf([this.headRect, this.foodCircle]);
+    this.tweens.killTweensOf([this.headRect, this.headGlow, this.eyeLeft, this.eyeRight, this.foodCircle]);
     this.headRect?.setScale(1).setVisible(false);
+    this.headGlow?.setVisible(false);
+    this.eyeLeft?.setVisible(false);
+    this.eyeRight?.setVisible(false);
     this.foodCircle?.setScale(1).setVisible(false);
     this.lastFoodKey = null;
     this.draw();
@@ -234,6 +294,11 @@ export class GameScene extends Phaser.Scene {
       const result = this.engine.step(dir);
       const newState = this.engine.getState();
       this.scoreText.setText(`Score: ${newState.score}`);
+
+      if (newState.score > this.lastDisplayedScore) {
+        this.lastDisplayedScore = newState.score;
+        this.pulseScore();
+      }
 
       if (result.ate) {
         this.spawnEatParticles(newState.snake[0]);
@@ -281,7 +346,7 @@ export class GameScene extends Phaser.Scene {
   private die() {
     this.persistBestScore();
     this.gameOverText.setText("Game Over\nTap to retry");
-    this.gameOverText.setVisible(true);
+    this.revealGameOver();
     this.tierBadge?.setVisible(false);
     this.cameras.main.shake(200, 0.005);
     this.draw();
@@ -290,9 +355,22 @@ export class GameScene extends Phaser.Scene {
   private win() {
     this.persistBestScore();
     this.gameOverText.setText("You Win!\nTap to retry");
-    this.gameOverText.setVisible(true);
+    this.revealGameOver();
     this.tierBadge?.setVisible(false);
     this.draw();
+  }
+
+  private revealGameOver() {
+    this.tweens.killTweensOf(this.gameOverText);
+    this.gameOverText.setAlpha(0).setScale(0.9).setVisible(true);
+    this.tweens.add({
+      targets: this.gameOverText,
+      alpha: 1,
+      scaleX: 1,
+      scaleY: 1,
+      duration: 250,
+      ease: "Back.easeOut",
+    });
   }
 
   private persistBestScore() {
@@ -319,10 +397,12 @@ export class GameScene extends Phaser.Scene {
       typeof window !== "undefined" &&
       window.matchMedia("(pointer: coarse)").matches;
 
+    const isPortrait = h > w;
+
     this.layout = computeLayout(w, h, {
-      cols: COLS,
-      rows: ROWS,
-      enableDPad: this.mode === "normal" && isCoarsePointer,
+      cols: isPortrait ? COLS_PORTRAIT : COLS,
+      rows: isPortrait ? ROWS_PORTRAIT : ROWS,
+      enableDPad: this.mode === "normal" && isCoarsePointer && !isPortrait,
       hasDebugButton: this.mode === "demo",
     });
 
@@ -333,7 +413,7 @@ export class GameScene extends Phaser.Scene {
       this.layout.gameOverX,
       this.layout.gameOverY,
     );
-    this.tierBadge.setPosition(this.layout.offsetX, 36);
+    this.tierBadge.setPosition(this.layout.gameOverX, this.layout.headerH + 4);
     this.menuButton.setPosition(this.layout.menuBtnX, this.layout.menuBtnY);
     this.debugButton?.setPosition(
       this.layout.debugBtnX,
@@ -350,6 +430,10 @@ export class GameScene extends Phaser.Scene {
   shutdown() {
     this.scale.off("resize", this.handleResize, this);
     this.touchControls?.destroy();
+    if (this.tierToastTimer) {
+      this.tierToastTimer.remove();
+      this.tierToastTimer = null;
+    }
   }
 
   /* ──────────── Rendering ──────────── */
@@ -359,7 +443,7 @@ export class GameScene extends Phaser.Scene {
     const L = this.layout;
 
     // Sync dynamic sizes in case cell changed on resize
-    this.headRect.setSize(L.cell - 2, L.cell - 2);
+    this.headRect.setSize(L.cell - 1, L.cell - 1);
     this.foodCircle.setRadius(Math.max(2, L.cell / 2 - 2));
 
     this.graphics.clear();
@@ -370,6 +454,12 @@ export class GameScene extends Phaser.Scene {
     this.drawBody(state.snake, alpha);
     this.drawHead(state.snake[0], alpha);
     this.drawFood(state.food, alpha);
+
+    if (!state.alive) {
+      this.headGlow.setVisible(false);
+      this.eyeLeft.setVisible(false);
+      this.eyeRight.setVisible(false);
+    }
 
     if (this.mode === "demo" && this.showAIDebug && this.aiDebug) {
       this.drawAIDebug();
@@ -386,7 +476,7 @@ export class GameScene extends Phaser.Scene {
   private drawGrid() {
     const g = this.graphics;
     const L = this.layout;
-    g.lineStyle(1, GRID_COLOR, 0.3);
+    g.lineStyle(1, GRID_COLOR, 0.55);
     for (let x = 0; x <= L.cols; x++) {
       const px = this.gridX(x);
       g.lineBetween(px, L.offsetY, px, L.offsetY + L.gridH);
@@ -422,9 +512,54 @@ export class GameScene extends Phaser.Scene {
 
   private drawHead(head: Point, alpha: number) {
     const L = this.layout;
+    const state = this.engine.getState();
+    const dir = state.direction;
+
+    const cx = this.gridX(head.x) + L.cell / 2;
+    const cy = this.gridY(head.y) + L.cell / 2;
+
+    // Head glow — slightly larger, low-alpha rectangle behind the head
+    this.headGlow
+      .setPosition(cx, cy)
+      .setFillStyle(SNAKE_HEAD_COLOR, alpha * 0.18)
+      .setVisible(true);
+
+    // Head rect — 1px larger than body cells
     this.headRect
-      .setPosition(this.gridX(head.x) + L.cell / 2, this.gridY(head.y) + L.cell / 2)
+      .setPosition(cx, cy)
+      .setSize(L.cell - 1, L.cell - 1)
       .setFillStyle(SNAKE_HEAD_COLOR, alpha)
+      .setVisible(true);
+
+    // Eyes positioned based on travel direction
+    const eyeOffset = L.cell * 0.22;
+    let ex1: number, ey1: number, ex2: number, ey2: number;
+
+    if (dir.x === 0 && dir.y === -1) {
+      // Up — eyes toward the top
+      ex1 = cx - eyeOffset; ey1 = cy - eyeOffset;
+      ex2 = cx + eyeOffset; ey2 = cy - eyeOffset;
+    } else if (dir.x === 0 && dir.y === 1) {
+      // Down — eyes toward the bottom
+      ex1 = cx - eyeOffset; ey1 = cy + eyeOffset;
+      ex2 = cx + eyeOffset; ey2 = cy + eyeOffset;
+    } else if (dir.x === -1 && dir.y === 0) {
+      // Left — eyes toward the left
+      ex1 = cx - eyeOffset; ey1 = cy - eyeOffset;
+      ex2 = cx - eyeOffset; ey2 = cy + eyeOffset;
+    } else {
+      // Right (dir.x === 1 && dir.y === 0) — eyes toward the right
+      ex1 = cx + eyeOffset; ey1 = cy - eyeOffset;
+      ex2 = cx + eyeOffset; ey2 = cy + eyeOffset;
+    }
+
+    this.eyeLeft
+      .setPosition(ex1, ey1)
+      .setFillStyle(SNAKE_EYE_COLOR, alpha)
+      .setVisible(true);
+    this.eyeRight
+      .setPosition(ex2, ey2)
+      .setFillStyle(SNAKE_EYE_COLOR, alpha)
       .setVisible(true);
   }
 
@@ -491,6 +626,20 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
+  private pulseScore() {
+    const t = this.scoreText;
+    this.tweens.killTweensOf(t);
+    t.setScale(1);
+    this.tweens.add({
+      targets: t,
+      scaleX: 1.18,
+      scaleY: 1.18,
+      duration: 120,
+      yoyo: true,
+      ease: "Quad.easeOut",
+    });
+  }
+
   /* ──────────── AI Debug Visualization ──────────── */
 
   private toggleDebug() {
@@ -500,9 +649,51 @@ export class GameScene extends Phaser.Scene {
     );
     this.debugButton?.setColor(this.showAIDebug ? "#00cec9" : "#b2bec3");
     if (!this.showAIDebug) {
+      this.lastTier = null;
+      if (this.tierToastTimer) {
+        this.tierToastTimer.remove();
+        this.tierToastTimer = null;
+      }
       this.tierBadge.setVisible(false);
+      this.tierBadge.setAlpha(0);
       this.debugGraphics.clear();
     }
+  }
+
+  private showTierToast(tier: string, color: string, label: string) {
+    if (tier === this.lastTier) return;
+    this.lastTier = tier;
+
+    this.tierBadgeText.setText(label);
+    this.tierBadgeText.setColor(color);
+    this.tierBadge.setAlpha(0);
+    this.tierBadge.setVisible(true);
+
+    this.tweens.killTweensOf(this.tierBadge);
+
+    this.tweens.add({
+      targets: this.tierBadge,
+      alpha: 1,
+      duration: 200,
+      ease: "Power2",
+    });
+
+    if (this.tierToastTimer) {
+      this.tierToastTimer.remove();
+      this.tierToastTimer = null;
+    }
+
+    this.tierToastTimer = this.time.delayedCall(2500, () => {
+      this.tweens.add({
+        targets: this.tierBadge,
+        alpha: 0,
+        duration: 400,
+        ease: "Power2",
+        onComplete: () => {
+          this.tierBadge.setVisible(false);
+        },
+      });
+    });
   }
 
   private drawAIDebug() {
@@ -567,8 +758,6 @@ export class GameScene extends Phaser.Scene {
       tier2: "Tier 2 \u00B7 Max Space",
       fallback: "Fallback \u00B7 Toward Food",
     };
-    this.tierBadge.setText(labels[tier]);
-    this.tierBadge.setColor(colors[tier]);
-    this.tierBadge.setVisible(true);
+    this.showTierToast(tier, colors[tier], labels[tier]);
   }
 }

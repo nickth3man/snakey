@@ -6,8 +6,8 @@
  * This is the single source of truth for on-screen geometry.
  */
 
-export const HEADER_H = 48;
-export const FOOTER_H_TOUCH_PORTRAIT = 180;
+export const HEADER_H = 40;
+export const FOOTER_H_TOUCH_PORTRAIT = 0;
 export const FOOTER_H_TOUCH_LANDSCAPE = 100;
 export const CELL_MIN = 8;
 export const DPAD_EDGE_PAD = 90;
@@ -74,7 +74,7 @@ export function computeLayout(
   const gridW = opts.cols * cell;
   const gridH = opts.rows * cell;
   const offsetX = Math.floor((vw - gridW) / 2);
-  const offsetY = HEADER_H + Math.floor((availH - gridH) / 2);
+  const offsetY = HEADER_H + 8;
 
   // D-pad scales modestly with cell, clamped to touch-friendly range
   const dpadStep = clampInt(cell * 1.6, 44, 64);
@@ -94,14 +94,14 @@ export function computeLayout(
     footerH,
     orientation,
     enableDPad: opts.enableDPad,
-    scoreX: 70,
+    scoreX: 80,
     scoreY: 10,
-    bestX: vw - (opts.hasDebugButton ? 180 : 20),
+    bestX: vw - (opts.hasDebugButton ? 200 : 16),
     bestY: 10,
-    menuBtnX: 20,
-    menuBtnY: 24,
-    debugBtnX: vw - 20,
-    debugBtnY: 24,
+    menuBtnX: 16,
+    menuBtnY: 20,
+    debugBtnX: vw - 16,
+    debugBtnY: 20,
     gameOverX: vw / 2,
     gameOverY: vh / 2,
     dpadCx: vw - DPAD_EDGE_PAD,
