@@ -72,20 +72,17 @@ export class GameScene extends Phaser.Scene {
     this.alive = true;
     this.score = 0;
     this.moveTimer = 0;
-    this.scoreText.setText("Score: 0");
+    this.scoreText.setText(`Score: ${this.score}`);
     this.gameOverText.setVisible(false);
     this.spawnFood();
     this.draw();
   }
 
   private spawnFood() {
-    const occupied = new Set(
-      this.snake.map((p) => `${p.x},${p.y}`)
-    );
     const free: Point[] = [];
     for (let x = 0; x < COLS; x++) {
       for (let y = 0; y < ROWS; y++) {
-        if (!occupied.has(`${x},${y}`)) free.push({ x, y });
+        if (!this.hitsSnake({ x, y })) free.push({ x, y });
       }
     }
     this.food = free[Math.floor(Math.random() * free.length)];
@@ -188,11 +185,11 @@ export class GameScene extends Phaser.Scene {
     const g = this.graphics;
     g.lineStyle(1, GRID_COLOR, 0.3);
     for (let x = 0; x <= COLS; x++) {
-      const px = OFFSET_X + x * CELL;
+      const px = this.gridX(x);
       g.lineBetween(px, OFFSET_Y, px, OFFSET_Y + ROWS * CELL);
     }
     for (let y = 0; y <= ROWS; y++) {
-      const py = OFFSET_Y + y * CELL;
+      const py = this.gridY(y);
       g.lineBetween(OFFSET_X, py, OFFSET_X + COLS * CELL, py);
     }
   }
