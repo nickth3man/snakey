@@ -16,7 +16,7 @@ import { SnakeGame, Point } from "../game/engine";
 
 export class GameScene extends Phaser.Scene {
   private engine!: SnakeGame;
-  private nextDirection: Point = { x: 1, y: 0 };
+  private directionQueue: Point[] = [];
   private moveTimer = 0;
   private moveInterval = 130;
 
@@ -83,7 +83,7 @@ export class GameScene extends Phaser.Scene {
 
   private startGame() {
     this.engine.start();
-    this.nextDirection = { x: 1, y: 0 };
+    this.directionQueue = [];
     this.moveTimer = 0;
     this.scoreText.setText("Score: 0");
     this.gameOverText.setVisible(false);
@@ -95,14 +95,15 @@ export class GameScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number) {
-    this.handleInput();
     const state = this.engine.getState();
     if (!state.alive) return;
+    this.handleInput();
 
     this.moveTimer += delta;
     if (this.moveTimer >= this.moveInterval) {
       this.moveTimer = 0;
-      const result = this.engine.step(this.nextDirection);
+      const dir = this.directionQueue.shift() ?? state.direction;
+      const result = this.engine.step(dir);
       const newState = this.engine.getState();
       this.scoreText.setText(`Score: ${newState.score}`);
 
@@ -118,18 +119,28 @@ export class GameScene extends Phaser.Scene {
 
   private handleInput() {
     const state = this.engine.getState();
-    if (!state.alive) return;
-    const d = state.direction;
+    const refDir = this.directionQueue.length > 0
+      ? this.directionQueue[this.directionQueue.length - 1]
+      : state.direction;
 
-    if (this.cursors.left.isDown && d.x !== 1) {
-      this.nextDirection = { x: -1, y: 0 };
-    } else if (this.cursors.right.isDown && d.x !== -1) {
-      this.nextDirection = { x: 1, y: 0 };
-    } else if (this.cursors.up.isDown && d.y !== 1) {
-      this.nextDirection = { x: 0, y: -1 };
-    } else if (this.cursors.down.isDown && d.y !== -1) {
-      this.nextDirection = { x: 0, y: 1 };
+    if (this.cursors.left.isDown && refDir.x !== 1) {
+      this.enqueue({ x: -1, y: 0 });
+    } else if (this.cursors.right.isDown && refDir.x !== -1) {
+      this.enqueue({ x: 1, y: 0 });
+    } else if (this.cursors.up.isDown && refDir.y !== 1) {
+      this.enqueue({ x: 0, y: -1 });
+    } else if (this.cursors.down.isDown && refDir.y !== -1) {
+      this.enqueue({ x: 0, y: 1 });
     }
+  }
+
+  private enqueue(dir: Point) {
+    if (this.directionQueue.length >= 2) return;
+    const last = this.directionQueue.length > 0
+      ? this.directionQueue[this.directionQueue.length - 1]
+      : this.engine.getState().direction;
+    if (dir.x === -last.x && dir.y === -last.y) return;
+    this.directionQueue.push(dir);
   }
 
   private die() {
