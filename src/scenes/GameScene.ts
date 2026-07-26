@@ -29,6 +29,11 @@ export class GameScene extends Phaser.Scene {
   private graphics!: Phaser.GameObjects.Graphics;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
+  // Juice: dedicated GameObjects for head + food
+  private headRect!: Phaser.GameObjects.Rectangle;
+  private foodCircle!: Phaser.GameObjects.Arc;
+  private lastFoodKey: string | null = null;
+
   // AI debug visualization
   private aiDebug: AIDebugInfo | null = null;
   private showAIDebug = false;
@@ -49,6 +54,27 @@ export class GameScene extends Phaser.Scene {
 
     this.graphics = this.add.graphics();
     this.debugGraphics = this.add.graphics().setDepth(15);
+
+    // Dedicated GameObjects for juice: food (depth 5), head (depth 10)
+    this.foodCircle = this.add
+      .circle(0, 0, CELL / 2 - 2, FOOD_COLOR)
+      .setOrigin(0.5)
+      .setVisible(false)
+      .setDepth(5);
+    this.headRect = this.add
+      .rectangle(0, 0, CELL - 2, CELL - 2, SNAKE_HEAD_COLOR)
+      .setOrigin(0.5)
+      .setVisible(false)
+      .setDepth(10);
+
+    // One-time particle texture (tiny food-colored dot)
+    if (!this.textures.exists("particle-food")) {
+      const pg = this.add.graphics();
+      pg.fillStyle(FOOD_COLOR, 1);
+      pg.fillCircle(4, 4, 4);
+      pg.generateTexture("particle-food", 8, 8);
+      pg.destroy();
+    }
     if (this.mode === "normal") {
       this.cursors = kb.createCursorKeys();
     }
@@ -116,6 +142,11 @@ export class GameScene extends Phaser.Scene {
     this.showAIDebug = false;
     this.tierBadge?.setVisible(false);
     this.debugGraphics?.clear();
+    // Reset juice state: kill tweens, hide + unscale head/food
+    this.tweens.killTweensOf([this.headRect, this.foodCircle]);
+    this.headRect?.setScale(1).setVisible(false);
+    this.foodCircle?.setScale(1).setVisible(false);
+    this.lastFoodKey = null;
     this.draw();
   }
 
@@ -145,6 +176,11 @@ export class GameScene extends Phaser.Scene {
       const result = this.engine.step(dir);
       const newState = this.engine.getState();
       this.scoreText.setText(`Score: ${newState.score}`);
+
+      if (result.ate) {
+        this.spawnEatParticles(newState.snake[0]);
+        this.pulseHead();
+      }
 
       if (result.won) {
         this.win();
@@ -187,6 +223,7 @@ export class GameScene extends Phaser.Scene {
     this.gameOverText.setText("Game Over\nSpace to retry · M for Menu");
     this.gameOverText.setVisible(true);
     this.tierBadge?.setVisible(false);
+    this.cameras.main.shake(200, 0.005);
     this.draw();
   }
 
@@ -220,7 +257,8 @@ export class GameScene extends Phaser.Scene {
     this.drawGrid();
 
     const alpha = state.alive ? 1 : 0.4;
-    this.drawSnake(state.snake, alpha);
+    this.drawBody(state.snake, alpha);
+    this.drawHead(state.snake[0], alpha);
     this.drawFood(state.food, alpha);
 
     if (this.mode === "demo" && this.showAIDebug && this.aiDebug) {
@@ -255,28 +293,78 @@ export class GameScene extends Phaser.Scene {
     return OFFSET_Y + row * CELL;
   }
 
-  private drawSnake(snake: Point[], alpha: number) {
+  private drawBody(snake: Point[], alpha: number) {
     const g = this.graphics;
-    snake.forEach((seg, i) => {
-      g.fillStyle(i === 0 ? SNAKE_HEAD_COLOR : SNAKE_BODY_COLOR, alpha);
-      g.fillRect(
-        this.gridX(seg.x) + 1,
-        this.gridY(seg.y) + 1,
-        CELL - 2,
-        CELL - 2,
-      );
-    });
+    for (let i = 1; i < snake.length; i++) {
+      const seg = snake[i];
+      g.fillStyle(SNAKE_BODY_COLOR, alpha);
+      g.fillRect(this.gridX(seg.x) + 1, this.gridY(seg.y) + 1, CELL - 2, CELL - 2);
+    }
   }
 
-  private drawFood(food: Point | null, alpha: number) {
-    if (!food) return;
-    const g = this.graphics;
-    g.fillStyle(FOOD_COLOR, alpha);
-    g.fillCircle(
-      this.gridX(food.x) + CELL / 2,
-      this.gridY(food.y) + CELL / 2,
-      CELL / 2 - 2,
-    );
+  private drawHead(head: Point, alpha: number) {
+    this.headRect
+      .setPosition(this.gridX(head.x) + CELL / 2, this.gridY(head.y) + CELL / 2)
+      .setFillStyle(SNAKE_HEAD_COLOR, alpha)
+      .setVisible(true);
+  }
+
+  private drawFood(foodPos: Point | null, alpha: number) {
+    if (!foodPos) {
+      this.foodCircle.setVisible(false);
+      this.lastFoodKey = null;
+      return;
+    }
+    const k = `${foodPos.x},${foodPos.y}`;
+    this.foodCircle
+      .setPosition(this.gridX(foodPos.x) + CELL / 2, this.gridY(foodPos.y) + CELL / 2)
+      .setFillStyle(FOOD_COLOR, alpha)
+      .setVisible(true);
+    if (k !== this.lastFoodKey) {
+      this.lastFoodKey = k;
+      this.tweens.killTweensOf(this.foodCircle);
+      this.foodCircle.setScale(0);
+      this.tweens.add({
+        targets: this.foodCircle,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 200,
+        ease: "Back.easeOut",
+      });
+    }
+  }
+
+  /* ──────────── Juice ──────────── */
+
+  private spawnEatParticles(head: Point) {
+    const x = this.gridX(head.x) + CELL / 2;
+    const y = this.gridY(head.y) + CELL / 2;
+    const emitter = this.add.particles(x, y, "particle-food", {
+      speed: { min: 40, max: 140 },
+      angle: { min: 0, max: 360 },
+      lifespan: { min: 300, max: 600 },
+      quantity: 1,
+      scale: { start: 1, end: 0 },
+      alpha: { start: 1, end: 0 },
+      blendMode: "ADD",
+      emitting: false,
+    });
+    emitter.setDepth(12);
+    emitter.explode(20);
+    this.time.delayedCall(700, () => emitter.destroy());
+  }
+
+  private pulseHead() {
+    this.tweens.killTweensOf(this.headRect);
+    this.headRect.setScale(1);
+    this.tweens.add({
+      targets: this.headRect,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      duration: 80,
+      yoyo: true,
+      ease: "Quad.easeOut",
+    });
   }
 
   /* ──────────── AI Debug Visualization ──────────── */
