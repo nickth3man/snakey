@@ -13,7 +13,7 @@ import {
   CANVAS_WIDTH,
 } from "../config";
 import { SnakeGame, Point } from "../game/engine";
-import { getAIDirection } from "../ai/demo-controller";
+import { getAIDirection, AIDebugInfo } from "../ai/demo-controller";
 
 export class GameScene extends Phaser.Scene {
   private engine!: SnakeGame;
@@ -29,6 +29,12 @@ export class GameScene extends Phaser.Scene {
   private graphics!: Phaser.GameObjects.Graphics;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
 
+  // AI debug visualization
+  private aiDebug: AIDebugInfo | null = null;
+  private showAIDebug = false;
+  private tierBadge!: Phaser.GameObjects.Text;
+  private debugGraphics!: Phaser.GameObjects.Graphics;
+
   constructor() {
     super("GameScene");
   }
@@ -42,6 +48,7 @@ export class GameScene extends Phaser.Scene {
     if (!kb) return;
 
     this.graphics = this.add.graphics();
+    this.debugGraphics = this.add.graphics().setDepth(15);
     if (this.mode === "normal") {
       this.cursors = kb.createCursorKeys();
     }
@@ -73,6 +80,12 @@ export class GameScene extends Phaser.Scene {
       )
       .setOrigin(1, 0);
 
+    this.tierBadge = this.add.text(OFFSET_X, 36, "", {
+      fontFamily: "monospace",
+      fontSize: "14px",
+      color: "#00cec9",
+    }).setVisible(false).setDepth(20);
+
     this.gameOverText = this.add
       .text(320, 260, "Game Over\nClick or press Space to restart", {
         fontFamily: "monospace",
@@ -86,6 +99,9 @@ export class GameScene extends Phaser.Scene {
     this.input.on("pointerdown", () => this.restartIfDead());
     kb.on("keydown-SPACE", () => this.restartIfDead());
     kb.on("keydown-M", () => this.scene.start("MenuScene"));
+    if (this.mode === "demo") {
+      kb.on("keydown-V", () => this.toggleDebug());
+    }
 
     this.startGame();
   }
@@ -96,6 +112,10 @@ export class GameScene extends Phaser.Scene {
     this.moveTimer = 0;
     this.scoreText.setText("Score: 0");
     this.gameOverText.setVisible(false);
+    this.aiDebug = null;
+    this.showAIDebug = false;
+    this.tierBadge?.setVisible(false);
+    this.debugGraphics?.clear();
     this.draw();
   }
 
@@ -114,9 +134,14 @@ export class GameScene extends Phaser.Scene {
     this.moveTimer += delta;
     if (this.moveTimer >= this.moveInterval) {
       this.moveTimer = 0;
-      const dir = this.mode === "demo"
-        ? getAIDirection(state, COLS, ROWS)
-        : this.directionQueue.shift() ?? state.direction;
+      let dir: Point;
+      if (this.mode === "demo") {
+        const ai = getAIDirection(state, COLS, ROWS);
+        this.aiDebug = ai.debug;
+        dir = ai.dir;
+      } else {
+        dir = this.directionQueue.shift() ?? state.direction;
+      }
       const result = this.engine.step(dir);
       const newState = this.engine.getState();
       this.scoreText.setText(`Score: ${newState.score}`);
@@ -161,6 +186,7 @@ export class GameScene extends Phaser.Scene {
     this.persistBestScore();
     this.gameOverText.setText("Game Over\nSpace to retry · M for Menu");
     this.gameOverText.setVisible(true);
+    this.tierBadge?.setVisible(false);
     this.draw();
   }
 
@@ -168,6 +194,7 @@ export class GameScene extends Phaser.Scene {
     this.persistBestScore();
     this.gameOverText.setText("You Win!\nSpace to retry · M for Menu");
     this.gameOverText.setVisible(true);
+    this.tierBadge?.setVisible(false);
     this.draw();
   }
 
@@ -195,6 +222,10 @@ export class GameScene extends Phaser.Scene {
     const alpha = state.alive ? 1 : 0.4;
     this.drawSnake(state.snake, alpha);
     this.drawFood(state.food, alpha);
+
+    if (this.mode === "demo" && this.showAIDebug && this.aiDebug) {
+      this.drawAIDebug();
+    }
   }
 
   private drawBorder() {
@@ -246,5 +277,76 @@ export class GameScene extends Phaser.Scene {
       this.gridY(food.y) + CELL / 2,
       CELL / 2 - 2,
     );
+  }
+
+  /* ──────────── AI Debug Visualization ──────────── */
+
+  private toggleDebug() {
+    this.showAIDebug = !this.showAIDebug;
+    if (!this.showAIDebug) {
+      this.tierBadge.setVisible(false);
+      this.debugGraphics.clear();
+    }
+  }
+
+  private drawAIDebug() {
+    if (!this.aiDebug) return;
+    const g = this.debugGraphics;
+    g.clear();
+
+    // --- Flood-fill region ---
+    g.fillStyle(0x6c5ce7, 0.15);
+    for (const cell of this.aiDebug.reachable) {
+      g.fillRect(this.gridX(cell.x) + 1, this.gridY(cell.y) + 1, CELL - 2, CELL - 2);
+    }
+
+    // --- BFS path (dashed) ---
+    const path = this.aiDebug.path;
+    if (path.length >= 2) {
+      g.lineStyle(2, 0xff7675, 0.9);
+      for (let i = 1; i < path.length; i++) {
+        const from = path[i - 1];
+        const to = path[i];
+        const x1 = this.gridX(from.x) + CELL / 2;
+        const y1 = this.gridY(from.y) + CELL / 2;
+        const x2 = this.gridX(to.x) + CELL / 2;
+        const y2 = this.gridY(to.y) + CELL / 2;
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const steps = Math.floor(dist / 6);
+        if (steps < 1) {
+          g.lineBetween(x1, y1, x2, y2);
+          continue;
+        }
+        const stepX = dx / steps;
+        const stepY = dy / steps;
+        for (let s = 0; s < steps; s++) {
+          if (s % 2 === 0) {
+            // draw on-segment
+            g.lineBetween(
+              x1 + s * stepX, y1 + s * stepY,
+              x1 + (s + 1) * stepX, y1 + (s + 1) * stepY,
+            );
+          }
+        }
+      }
+    }
+
+    // --- Tier badge ---
+    const tier = this.aiDebug.tier;
+    const colors: Record<string, string> = {
+      tier1: "#00cec9",
+      tier2: "#fdcb6e",
+      fallback: "#ff7675",
+    };
+    const labels: Record<string, string> = {
+      tier1: "Tier 1 · Safe Pursuit",
+      tier2: "Tier 2 · Max Space",
+      fallback: "Fallback · Toward Food",
+    };
+    this.tierBadge.setText(labels[tier]);
+    this.tierBadge.setColor(colors[tier]);
+    this.tierBadge.setVisible(true);
   }
 }

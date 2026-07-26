@@ -1,5 +1,28 @@
 import { Point } from "../game/engine";
 
+/* ──────────── New types for AI visualization ──────────── */
+
+export type AITier = "tier1" | "tier2" | "fallback";
+
+export interface AICandidate {
+  dir: Point;
+  newHead: Point;
+  space: number;
+  foodPath: Point[] | null;
+}
+
+export interface AIDebugInfo {
+  tier: AITier;
+  path: Point[];
+  reachable: Point[];
+  candidates: AICandidate[];
+}
+
+export interface AIDecision {
+  dir: Point;
+  debug: AIDebugInfo;
+}
+
 const DIRECTIONS: Point[] = [
   { x: 0, y: -1 },  // UP
   { x: 1, y: 0 },   // RIGHT
@@ -64,18 +87,18 @@ function bfs(
   return null;
 }
 
-/** Count reachable cells from start via BFS, avoiding obstacles. */
-function floodFillCount(
+/** Returns the list of reachable cells from start via BFS, avoiding obstacles. */
+function floodFillCells(
   start: Point,
   cols: number,
   rows: number,
   obstacles: Set<string>,
-): number {
-  if (obstacles.has(key(start))) return 0;
+): Point[] {
+  if (obstacles.has(key(start))) return [];
   const visited = new Set<string>();
   visited.add(key(start));
+  const cells: Point[] = [start];
   const queue: Point[] = [start];
-  let count = 1;
   while (queue.length > 0) {
     const pos = queue.shift()!;
     for (const dir of DIRECTIONS) {
@@ -86,10 +109,20 @@ function floodFillCount(
       if (visited.has(nk)) continue;
       visited.add(nk);
       queue.push(next);
-      count++;
+      cells.push(next);
     }
   }
-  return count;
+  return cells;
+}
+
+/** Count reachable cells from start via BFS, avoiding obstacles. */
+function floodFillCount(
+  start: Point,
+  cols: number,
+  rows: number,
+  obstacles: Set<string>,
+): number {
+  return floodFillCells(start, cols, rows, obstacles).length;
 }
 
 /** Count direction changes along a path. */
@@ -149,7 +182,7 @@ export function getAIDirection(
   },
   cols: number,
   rows: number,
-): Point {
+): AIDecision {
   const { snake, food, direction } = state;
   const head = snake[0];
 
@@ -174,15 +207,57 @@ export function getAIDirection(
     validMoves.push({ dir, newHead });
   }
 
-  if (validMoves.length === 0) return direction;
-  if (validMoves.length === 1) return validMoves[0].dir;
-
   // ── Obstacle set for lookahead: body minus tail ───────────────
   // After one step, the tail cell becomes free and newHead is occupied.
   const bodyMinusTail = new Set<string>();
   for (let i = 0; i < snake.length - 1; i++) {
     bodyMinusTail.add(key(snake[i]));
   }
+
+  // ── Early returns with debug info ─────────────────────────────
+
+  if (validMoves.length === 0) {
+    return {
+      dir: direction,
+      debug: {
+        tier: "fallback",
+        path: [],
+        reachable: [],
+        candidates: [],
+      },
+    };
+  }
+
+  if (validMoves.length === 1) {
+    const chosen = validMoves[0];
+    return {
+      dir: chosen.dir,
+      debug: {
+        tier: "fallback",
+        path: [],
+        reachable: floodFillCells(chosen.newHead, cols, rows, bodyMinusTail),
+        candidates: [{
+          dir: chosen.dir,
+          newHead: chosen.newHead,
+          space: floodFillCount(chosen.newHead, cols, rows, bodyMinusTail),
+          foodPath: food !== null
+            ? bfs(chosen.newHead, food, cols, rows, bodyMinusTail)
+            : null,
+        }],
+      },
+    };
+  }
+
+  // ── Build candidates for all valid moves ──────────────────────
+
+  const candidates: AICandidate[] = validMoves.map(({ dir, newHead }) => ({
+    dir,
+    newHead,
+    space: floodFillCount(newHead, cols, rows, bodyMinusTail),
+    foodPath: food !== null
+      ? bfs(newHead, food, cols, rows, bodyMinusTail)
+      : null,
+  }));
 
   // ── Step 2: Tier 1 — Safe Food Pursuit ────────────────────────
 
@@ -214,7 +289,26 @@ export function getAIDirection(
         if (a.wallHugs !== b.wallHugs) return b.wallHugs - a.wallHugs;
         return b.turns - a.turns;
       });
-      return tier1[0].dir;
+      const chosenDir = tier1[0].dir;
+      const chosenCandidate = candidates.find(
+        (c) => c.dir.x === chosenDir.x && c.dir.y === chosenDir.y,
+      )!;
+      const chosenFoodPath = bfs(
+        chosenCandidate.newHead,
+        food,
+        cols,
+        rows,
+        bodyMinusTail,
+      ) ?? [head];
+      return {
+        dir: chosenDir,
+        debug: {
+          tier: "tier1",
+          path: [head, ...chosenFoodPath],
+          reachable: floodFillCells(chosenCandidate.newHead, cols, rows, bodyMinusTail),
+          candidates,
+        },
+      };
     }
   }
 
@@ -245,7 +339,19 @@ export function getAIDirection(
     // Only use Tier 2 if there's a meaningful space difference
     // (otherwise fall through to fallback which handles dead ends)
     if (tier2.length > 0 && tier2[0].space > 1) {
-      return tier2[0].dir;
+      const chosenDir = tier2[0].dir;
+      const chosenCandidate = candidates.find(
+        (c) => c.dir.x === chosenDir.x && c.dir.y === chosenDir.y,
+      )!;
+      return {
+        dir: chosenDir,
+        debug: {
+          tier: "tier2",
+          path: [],
+          reachable: floodFillCells(chosenCandidate.newHead, cols, rows, bodyMinusTail),
+          candidates,
+        },
+      };
     }
   }
 
@@ -261,5 +367,17 @@ export function getAIDirection(
     });
   }
 
-  return validMoves[0].dir;
+  const chosenDir = validMoves[0].dir;
+  const chosenCandidate = candidates.find(
+    (c) => c.dir.x === chosenDir.x && c.dir.y === chosenDir.y,
+  )!;
+  return {
+    dir: chosenDir,
+    debug: {
+      tier: "fallback",
+      path: [],
+      reachable: floodFillCells(chosenCandidate.newHead, cols, rows, bodyMinusTail),
+      candidates,
+    },
+  };
 }
