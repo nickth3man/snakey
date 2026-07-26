@@ -1,13 +1,5 @@
 import Phaser from "phaser";
-import {
-  CANVAS_WIDTH,
-  CANVAS_HEIGHT,
-  BACKGROUND_COLOR,
-  FOOD_COLOR,
-  CELL,
-  OFFSET_X,
-  OFFSET_Y,
-} from "../config";
+import { BACKGROUND_COLOR, FOOD_COLOR } from "../config";
 
 /* ──────────── Constants ──────────── */
 
@@ -15,9 +7,6 @@ const CARD_W = 260;
 const CARD_H = 160;
 const CARD_RADIUS = 14;
 const CARD_GAP = 30;
-const LEFT_CARD_CX = (CANVAS_WIDTH - CARD_GAP) / 2 - CARD_W / 2;
-const RIGHT_CARD_CX = (CANVAS_WIDTH + CARD_GAP) / 2 + CARD_W / 2;
-const CARDS_CY = 280;
 
 const COLOR_CYAN = 0x00cec9;
 const COLOR_PURPLE = 0x6c5ce7;
@@ -26,8 +15,6 @@ const MUTED_TEXT = "#636e72";
 const BRIGHT_MUTED = "#b2bec3";
 const ACCENT_CYAN_STR = "#00cec9";
 const ACCENT_PURPLE_STR = "#6c5ce7";
-
-/* ──────────── Helpers ──────────── */
 
 /* ================================================================
    MENU SCENE
@@ -49,17 +36,37 @@ export class MenuScene extends Phaser.Scene {
   /* ────── Create ────── */
 
   create() {
-    const W = CANVAS_WIDTH;
-    const H = CANVAS_HEIGHT;
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const cx = W / 2;
 
     this.cameras.main.setBackgroundColor(BACKGROUND_COLOR);
     this.drawBackgroundDecoration(W, H);
 
+    /* ---- Card layout: landscape = side-by-side, portrait = stacked ---- */
+    const isPortrait = H > W;
+    const cardsCenterY = H * 0.52;
+
+    let leftCardX: number;
+    let rightCardX: number;
+    let leftCardY: number;
+    let rightCardY: number;
+
+    if (isPortrait) {
+      leftCardX = rightCardX = cx;
+      leftCardY = cardsCenterY - CARD_H / 2 - CARD_GAP / 2;
+      rightCardY = cardsCenterY + CARD_H / 2 + CARD_GAP / 2;
+    } else {
+      leftCardX = cx - CARD_W / 2 - CARD_GAP / 2;
+      rightCardX = cx + CARD_W / 2 + CARD_GAP / 2;
+      leftCardY = rightCardY = cardsCenterY;
+    }
+
     /* ---- Title ---- */
     const title = this.add
-      .text(W / 2, 70, "SNAKEY", {
+      .text(cx, H * 0.14, "SNAKEY", {
         fontFamily: "monospace",
-        fontSize: "68px",
+        fontSize: Math.min(68, W * 0.12) + "px",
         color: ACCENT_CYAN_STR,
         fontStyle: "bold",
       })
@@ -68,9 +75,9 @@ export class MenuScene extends Phaser.Scene {
 
     /* ---- Subtitle ---- */
     const subtitle = this.add
-      .text(W / 2, 128, "Choose your mode", {
+      .text(cx, H * 0.14 + 60, "Choose your mode", {
         fontFamily: "monospace",
-        fontSize: "18px",
+        fontSize: Math.min(18, W * 0.035) + "px",
         color: MUTED_TEXT,
       })
       .setOrigin(0.5)
@@ -78,8 +85,8 @@ export class MenuScene extends Phaser.Scene {
 
     /* ---- Cards ---- */
     const normalCard = this.createModeCard(
-      LEFT_CARD_CX,
-      CARDS_CY,
+      leftCardX,
+      leftCardY,
       "NORMAL",
       "Tap or use arrow keys",
       COLOR_CYAN,
@@ -89,8 +96,8 @@ export class MenuScene extends Phaser.Scene {
     normalCard.setAlpha(0).setScale(0.85);
 
     const demoCard = this.createModeCard(
-      RIGHT_CARD_CX,
-      CARDS_CY,
+      rightCardX,
+      rightCardY,
       "DEMO",
       "Watch the AI",
       COLOR_PURPLE,
@@ -112,7 +119,7 @@ export class MenuScene extends Phaser.Scene {
     }
 
     const scoreText = this.add
-      .text(W / 2, 465, bestScoreLabel, {
+      .text(cx, H - 62, bestScoreLabel, {
         fontFamily: "monospace",
         fontSize: "16px",
         color: MUTED_TEXT,
@@ -135,7 +142,7 @@ export class MenuScene extends Phaser.Scene {
     this.tweens.add({
       targets: title,
       alpha: 1,
-      y: 70,
+      y: H * 0.14,
       duration: 600,
       ease: "Power3.easeOut",
     });
@@ -180,14 +187,16 @@ export class MenuScene extends Phaser.Scene {
     });
 
     /* ---- AI Benchmark Stats ---- */
-    const bm = this.cache.json.get("benchmark") as { runs: number; version: number; max: number; winRate: number } | undefined;
+    const bm = this.cache.json.get("benchmark") as
+      | { runs: number; version: number; max: number; winRate: number }
+      | undefined;
     const aiStatsLabel =
       bm && bm.runs > 0
-        ? `AI best: ${bm.max} · win rate: ${(bm.winRate * 100).toFixed(0)}%`
+        ? `AI best: ${bm.max} \u00B7 win rate: ${(bm.winRate * 100).toFixed(0)}%`
         : "AI: run `npm run benchmark`";
 
     const aiStatsText = this.add
-      .text(W / 2, 493, aiStatsLabel, {
+      .text(cx, H - 34, aiStatsLabel, {
         fontFamily: "monospace",
         fontSize: "14px",
         color: ACCENT_PURPLE_STR,
@@ -202,44 +211,52 @@ export class MenuScene extends Phaser.Scene {
       delay: 850,
       ease: "Power2.easeOut",
     });
+
+    /* ---- Resize listener: restart to re-layout ---- */
+    this.scale.on("resize", this.onResize, this);
+  }
+
+  private onResize() {
+    this.scale.off("resize", this.onResize, this);
+    this.scene.restart();
   }
 
   /* ────── Background Decoration ────── */
 
   private drawBackgroundDecoration(w: number, h: number) {
     const g = this.add.graphics();
+    const margin = Math.floor(w * 0.03);
+    const gridStep = Math.floor(w / 30);
 
-    /* Subtle grid — echoes the game grid */
+    /* Subtle grid */
     g.lineStyle(1, 0xffffff, 0.025);
-    for (let x = 0; x <= w; x += CELL) {
+    for (let x = 0; x <= w; x += gridStep) {
       g.lineBetween(x, 0, x, h);
     }
-    for (let y = 0; y <= h; y += CELL) {
+    for (let y = 0; y <= h; y += gridStep) {
       g.lineBetween(0, y, w, y);
     }
 
     /* Faint horizontal accent lines */
     const accentAlpha = 0.06;
     g.lineStyle(2, COLOR_CYAN, accentAlpha);
-    g.lineBetween(OFFSET_X, 155, w / 2 - 80, 155);
-    g.lineBetween(w / 2 + 80, 155, w - OFFSET_X, 155);
+    g.lineBetween(margin, 155, w / 2 - 80, 155);
+    g.lineBetween(w / 2 + 80, 155, w - margin, 155);
 
     g.lineStyle(1, COLOR_PURPLE, accentAlpha * 0.8);
-    g.lineBetween(OFFSET_X, 420, w - OFFSET_X, 420);
+    g.lineBetween(margin, h * 0.78, w - margin, h * 0.78);
 
-    /* Winding snake-like decorative path — very subtle */
+    /* Winding snake-like decorative path */
     g.lineStyle(1.5, COLOR_CYAN, 0.04);
-    const path = g;
     const startX = w - 60;
     const startY = h - 100;
-    path.beginPath();
-    path.moveTo(startX, startY);
-    // S-curve
-    path.lineTo(startX - 40, startY - 30);
-    path.lineTo(startX - 120, startY - 50);
-    path.lineTo(startX - 180, startY - 20);
-    path.lineTo(startX - 200, startY + 10);
-    path.strokePath();
+    g.beginPath();
+    g.moveTo(startX, startY);
+    g.lineTo(startX - 40, startY - 30);
+    g.lineTo(startX - 120, startY - 50);
+    g.lineTo(startX - 180, startY - 20);
+    g.lineTo(startX - 200, startY + 10);
+    g.strokePath();
 
     /* Scattered subtle dots along the path */
     g.fillStyle(COLOR_CYAN, 0.06);
@@ -255,10 +272,10 @@ export class MenuScene extends Phaser.Scene {
       g.fillCircle(dx, dy, 3);
     }
 
-    /* A couple of faint food-colored accent dots for atmosphere */
+    /* Faint food-colored accent dots */
     g.fillStyle(FOOD_COLOR, 0.05);
-    g.fillCircle(OFFSET_X + 30, h - 60, 4);
-    g.fillCircle(w - OFFSET_X - 50, OFFSET_Y + 30, 3);
+    g.fillCircle(margin + 30, h - 60, 4);
+    g.fillCircle(w - margin - 50, h * 0.08, 3);
   }
 
   /* ────── Mode Card Factory ────── */
@@ -279,7 +296,7 @@ export class MenuScene extends Phaser.Scene {
     const gfx = this.add.graphics();
     container.add(gfx);
 
-    /* ---- Shadow (drawn first, behind card) ---- */
+    /* ---- Shadow ---- */
     const shadow = this.add.graphics();
     shadow.fillStyle(0x000000, 0.25);
     shadow.fillRoundedRect(
@@ -354,7 +371,6 @@ export class MenuScene extends Phaser.Scene {
     });
 
     container.on("pointerdown", () => {
-      // Brief press-down feedback
       this.tweens.add({
         targets: container,
         scaleX: 0.96,
@@ -394,7 +410,6 @@ export class MenuScene extends Phaser.Scene {
 
     /* Border with subtle inner glow on hover */
     if (hovered) {
-      // Outer border
       gfx.lineStyle(strokeWidth + 1, accentNum, 0.3);
       gfx.strokeRoundedRect(
         -CARD_W / 2 - 1,

@@ -7,6 +7,7 @@
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <meta name="theme-color" content="#1a1a2e" />
+    <meta name="color-scheme" content="dark" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -22,11 +23,9 @@
       body {
         position: fixed;
         inset: 0;
-        min-height: 100dvh;
+        width: 100%;
+        height: 100%;
         background: #1a1a2e;
-        display: flex;
-        justify-content: center;
-        align-items: center;
         overflow: hidden;
         touch-action: none;
         overscroll-behavior: none;
@@ -39,87 +38,9 @@
         touch-action: none;
         display: block;
       }
-
-      /* Portrait orientation hint: the playfield is landscape, so encourage rotation */
-      #rotate-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: 50;
-        display: none;
-        flex-direction: column;
-        justify-content: center;
-        align-items: center;
-        gap: 18px;
-        padding: 24px;
-        text-align: center;
-        background: #1a1a2e;
-        font-family: monospace;
-        color: #b2bec3;
-      }
-      #rotate-overlay .glyph {
-        font-size: 64px;
-        color: #00cec9;
-        line-height: 1;
-        animation: snakey-spin 2.4s ease-in-out infinite;
-      }
-      #rotate-overlay .title {
-        font-size: 20px;
-        color: #e0e0e0;
-        letter-spacing: 0.04em;
-      }
-      #rotate-overlay .sub {
-        font-size: 14px;
-        color: #636e72;
-      }
-      #rotate-overlay .dismiss {
-        margin-top: 6px;
-        padding: 10px 18px;
-        font-family: monospace;
-        font-size: 14px;
-        color: #00cec9;
-        background: transparent;
-        border: 1px solid #00cec9;
-        border-radius: 8px;
-        cursor: pointer;
-      }
-      #rotate-overlay .dismiss:active {
-        background: rgba(0, 206, 201, 0.15);
-      }
-      #rotate-overlay.hidden {
-        display: none !important;
-      }
-      @media (orientation: portrait) {
-        #rotate-overlay {
-          display: flex;
-        }
-      }
-      @keyframes snakey-spin {
-        0%,
-        100% {
-          transform: rotate(0deg);
-        }
-        50% {
-          transform: rotate(-90deg);
-        }
-      }
     </style>
   </head>
   <body>
-    <div id="rotate-overlay" aria-hidden="true">
-      <div class="glyph">&#8635;</div>
-      <div class="title">Rotate your device</div>
-      <div class="sub">Snakey plays best in landscape.</div>
-      <button id="rotate-dismiss" class="dismiss" type="button">Play anyway</button>
-    </div>
     <script type="module" src="/src/main.ts"></script>
-    <script>
-      document
-        .getElementById("rotate-dismiss")
-        .addEventListener("click", function () {
-          document
-            .getElementById("rotate-overlay")
-            .classList.add("hidden");
-        });
-    </script>
   </body>
 </html>
