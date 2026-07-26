@@ -1,15 +1,16 @@
 import Phaser from "phaser";
-
-const CELL = 20;
-const COLS = 30;
-const ROWS = 22;
-const OFFSET_X = 20;
-const OFFSET_Y = 40;
-const WALL_COLOR = 0x2d3436;
-const GRID_COLOR = 0x16213e;
-const SNAKE_HEAD_COLOR = 0x00cec9;
-const SNAKE_BODY_COLOR = 0x6c5ce7;
-const FOOD_COLOR = 0xff7675;
+import {
+  CELL,
+  COLS,
+  ROWS,
+  OFFSET_X,
+  OFFSET_Y,
+  WALL_COLOR,
+  GRID_COLOR,
+  SNAKE_HEAD_COLOR,
+  SNAKE_BODY_COLOR,
+  FOOD_COLOR,
+} from "../config";
 
 interface Point {
   x: number;

@@ -1,11 +1,12 @@
 import Phaser from "phaser";
 import { GameScene } from "./scenes/GameScene";
+import { CANVAS_WIDTH, CANVAS_HEIGHT, BACKGROUND_COLOR } from "./config";
 
 const config: Phaser.Types.Core.GameConfig = {
   type: Phaser.AUTO,
-  width: 640,
-  height: 480,
-  backgroundColor: "#1a1a2e",
+  width: CANVAS_WIDTH,
+  height: CANVAS_HEIGHT,
+  backgroundColor: BACKGROUND_COLOR,
   parent: document.body,
   scene: [GameScene],
 };
