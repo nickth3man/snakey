@@ -96,7 +96,7 @@ export function computeLayout(
     enableDPad: opts.enableDPad,
     scoreX: 70,
     scoreY: 10,
-    bestX: vw - (opts.hasDebugButton ? 90 : 20),
+    bestX: vw - (opts.hasDebugButton ? 180 : 20),
     bestY: 10,
     menuBtnX: 20,
     menuBtnY: 24,
