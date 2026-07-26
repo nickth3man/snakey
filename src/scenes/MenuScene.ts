@@ -47,6 +47,12 @@ export class MenuScene extends Phaser.Scene {
     super({ key: "MenuScene" });
   }
 
+  /* ────── Preload ────── */
+
+  preload() {
+    this.load.json("benchmark", "benchmark.json");
+  }
+
   /* ────── Create ────── */
 
   create() {
@@ -177,6 +183,30 @@ export class MenuScene extends Phaser.Scene {
       alpha: 1,
       duration: 400,
       delay: 700,
+      ease: "Power2.easeOut",
+    });
+
+    /* ---- AI Benchmark Stats ---- */
+    const bm = this.cache.json.get("benchmark") as { runs: number; version: number; max: number; winRate: number } | undefined;
+    const aiStatsLabel =
+      bm && bm.runs > 0
+        ? `AI best: ${bm.max} · win rate: ${(bm.winRate * 100).toFixed(0)}%`
+        : "AI: run `npm run benchmark`";
+
+    const aiStatsText = this.add
+      .text(W / 2, 493, aiStatsLabel, {
+        fontFamily: "monospace",
+        fontSize: "14px",
+        color: ACCENT_PURPLE_STR,
+      })
+      .setOrigin(0.5)
+      .setAlpha(0);
+
+    this.tweens.add({
+      targets: aiStatsText,
+      alpha: 1,
+      duration: 400,
+      delay: 850,
       ease: "Power2.easeOut",
     });
   }
