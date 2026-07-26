@@ -3,6 +3,8 @@ export interface Point {
   y: number;
 }
 
+export type RNG = () => number;
+
 function cellKey(x: number, y: number): string {
   return `${x},${y}`;
 }
@@ -26,12 +28,15 @@ export class SnakeGame {
   private alive = false;
   private won = false;
 
+  private rng: RNG;
+
   /** Free-cell set optimization (L-03). Keys are "x,y" strings. */
   private freeCells: Set<string> = new Set();
 
-  constructor(config: { cols: number; rows: number }) {
+  constructor(config: { cols: number; rows: number; rng?: RNG }) {
     this.cols = config.cols;
     this.rows = config.rows;
+    this.rng = config.rng ?? Math.random;
   }
 
   /** Start or restart a game. Resets snake, score, food, alive/won. */
@@ -157,7 +162,7 @@ export class SnakeGame {
     }
 
     const free = Array.from(this.freeCells);
-    const key = free[Math.floor(Math.random() * free.length)];
+    const key = free[Math.floor(this.rng() * free.length)];
     this.food = parseKey(key);
   }
 }

@@ -8,7 +8,8 @@
     "build": "tsc && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "benchmark": "tsx src/benchmark/run.ts"
   },
   "dependencies": {
     "phaser": "^3.87.0"
@@ -16,6 +17,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "eslint": "^10.8.0",
+    "tsx": "^4.19.0",
     "typescript": "~5.7.2",
     "typescript-eslint": "^8.65.0",
     "vite": "^6.0.0",
