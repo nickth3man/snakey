@@ -213,16 +213,16 @@ export class MenuScene extends Phaser.Scene {
     });
 
     /* ---- Resize listener: restart to re-layout ---- */
+    // Use scene events (not shutdown override) for guaranteed cleanup on scene.stop()
+    this.events.on("shutdown", () => {
+      this.scale.off("resize", this.onResize, this);
+    });
     this.scale.on("resize", this.onResize, this);
   }
 
   private onResize() {
     this.scale.off("resize", this.onResize, this);
     this.scene.restart();
-  }
-
-  shutdown() {
-    this.scale.off("resize", this.onResize, this);
   }
 
   /* ────── Background Decoration ────── */
