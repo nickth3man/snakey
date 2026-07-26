@@ -7,7 +7,8 @@
  */
 
 export const HEADER_H = 48;
-export const FOOTER_H_TOUCH = 180;
+export const FOOTER_H_TOUCH_PORTRAIT = 180;
+export const FOOTER_H_TOUCH_LANDSCAPE = 100;
 export const CELL_MIN = 8;
 export const DPAD_EDGE_PAD = 90;
 
@@ -58,7 +59,11 @@ export function computeLayout(
   opts: LayoutOpts,
 ): Layout {
   const orientation: Orientation = vh > vw ? "portrait" : "landscape";
-  const footerH = opts.enableDPad ? FOOTER_H_TOUCH : 0;
+  const footerH = opts.enableDPad
+    ? orientation === "portrait"
+      ? FOOTER_H_TOUCH_PORTRAIT
+      : FOOTER_H_TOUCH_LANDSCAPE
+    : 0;
   const availW = vw;
   const availH = Math.max(vh - HEADER_H - footerH, 1);
 

@@ -1,8 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { computeLayout, HEADER_H, CELL_MIN } from "./layout";
+import {
+  computeLayout,
+  HEADER_H,
+  CELL_MIN,
+  FOOTER_H_TOUCH_PORTRAIT,
+  FOOTER_H_TOUCH_LANDSCAPE,
+} from "./layout";
 
 describe("computeLayout", () => {
   it("produces square cells (cols*cell <= availW, rows*cell <= availH)", () => {
+    // 800x600 is landscape
     const L = computeLayout(800, 600, {
       cols: 30,
       rows: 22,
@@ -13,7 +20,16 @@ describe("computeLayout", () => {
     expect(L.gridW).toBe(L.cols * L.cell);
     expect(L.gridH).toBe(L.rows * L.cell);
     expect(L.gridW).toBeLessThanOrEqual(800);
-    expect(L.gridH).toBeLessThanOrEqual(600 - HEADER_H - 180);
+    expect(L.gridH).toBeLessThanOrEqual(600 - HEADER_H - FOOTER_H_TOUCH_LANDSCAPE);
+  });
+
+  it("uses smaller footer in landscape for larger grid", () => {
+    const L = computeLayout(800, 600, {
+      cols: 30, rows: 22, enableDPad: true, hasDebugButton: false,
+    });
+    expect(L.orientation).toBe("landscape");
+    expect(L.footerH).toBe(FOOTER_H_TOUCH_LANDSCAPE);
+    expect(FOOTER_H_TOUCH_LANDSCAPE).toBeLessThan(FOOTER_H_TOUCH_PORTRAIT);
   });
 
   it("clamps to CELL_MIN on absurdly small viewports", () => {

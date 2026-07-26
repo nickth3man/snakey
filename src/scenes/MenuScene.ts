@@ -221,6 +221,10 @@ export class MenuScene extends Phaser.Scene {
     this.scene.restart();
   }
 
+  shutdown() {
+    this.scale.off("resize", this.onResize, this);
+  }
+
   /* ────── Background Decoration ────── */
 
   private drawBackgroundDecoration(w: number, h: number) {
