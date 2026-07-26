@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import { MenuScene } from "./scenes/MenuScene";
 import { GameScene } from "./scenes/GameScene";
 import { CANVAS_WIDTH, CANVAS_HEIGHT, BACKGROUND_COLOR } from "./config";
 
@@ -8,7 +9,7 @@ const config: Phaser.Types.Core.GameConfig = {
   height: CANVAS_HEIGHT,
   backgroundColor: BACKGROUND_COLOR,
   parent: document.body,
-  scene: [GameScene],
+  scene: [MenuScene, GameScene],
 };
 
 new Phaser.Game(config);

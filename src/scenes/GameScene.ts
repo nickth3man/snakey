@@ -13,12 +13,14 @@ import {
   CANVAS_WIDTH,
 } from "../config";
 import { SnakeGame, Point } from "../game/engine";
+import { getAIDirection } from "../ai/demo-controller";
 
 export class GameScene extends Phaser.Scene {
   private engine!: SnakeGame;
   private directionQueue: Point[] = [];
   private moveTimer = 0;
   private moveInterval = 130;
+  private mode: "normal" | "demo" = "normal";
 
   private scoreText!: Phaser.GameObjects.Text;
   private bestScore = 0;
@@ -31,12 +33,18 @@ export class GameScene extends Phaser.Scene {
     super("GameScene");
   }
 
+  init(data: { mode?: "normal" | "demo" }) {
+    this.mode = data?.mode ?? "normal";
+  }
+
   create() {
     const kb = this.input.keyboard;
     if (!kb) return;
 
     this.graphics = this.add.graphics();
-    this.cursors = kb.createCursorKeys();
+    if (this.mode === "normal") {
+      this.cursors = kb.createCursorKeys();
+    }
     this.engine = new SnakeGame({ cols: COLS, rows: ROWS });
 
     this.scoreText = this.add.text(OFFSET_X, 10, "Score: 0", {
@@ -77,6 +85,7 @@ export class GameScene extends Phaser.Scene {
 
     this.input.on("pointerdown", () => this.restartIfDead());
     kb.on("keydown-SPACE", () => this.restartIfDead());
+    kb.on("keydown-M", () => this.scene.start("MenuScene"));
 
     this.startGame();
   }
@@ -97,12 +106,17 @@ export class GameScene extends Phaser.Scene {
   update(_time: number, delta: number) {
     const state = this.engine.getState();
     if (!state.alive) return;
-    this.handleInput();
+
+    if (this.mode === "normal") {
+      this.handleInput();
+    }
 
     this.moveTimer += delta;
     if (this.moveTimer >= this.moveInterval) {
       this.moveTimer = 0;
-      const dir = this.directionQueue.shift() ?? state.direction;
+      const dir = this.mode === "demo"
+        ? getAIDirection(state, COLS, ROWS)
+        : this.directionQueue.shift() ?? state.direction;
       const result = this.engine.step(dir);
       const newState = this.engine.getState();
       this.scoreText.setText(`Score: ${newState.score}`);
@@ -145,14 +159,14 @@ export class GameScene extends Phaser.Scene {
 
   private die() {
     this.persistBestScore();
-    this.gameOverText.setText("Game Over\nClick or press Space to restart");
+    this.gameOverText.setText("Game Over\nSpace to retry · M for Menu");
     this.gameOverText.setVisible(true);
     this.draw();
   }
 
   private win() {
     this.persistBestScore();
-    this.gameOverText.setText("You Win!\nClick or press Space to restart");
+    this.gameOverText.setText("You Win!\nSpace to retry · M for Menu");
     this.gameOverText.setVisible(true);
     this.draw();
   }
