@@ -10,6 +10,7 @@ import {
   SNAKE_HEAD_COLOR,
   SNAKE_BODY_COLOR,
   FOOD_COLOR,
+  CANVAS_WIDTH,
 } from "../config";
 
 interface Point {
@@ -31,6 +32,8 @@ export class GameScene extends Phaser.Scene {
   private alive = false;
   private score = 0;
   private scoreText!: Phaser.GameObjects.Text;
+  private bestScore = 0;
+  private bestScoreText!: Phaser.GameObjects.Text;
   private gameOverText!: Phaser.GameObjects.Text;
   private graphics!: Phaser.GameObjects.Graphics;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -51,6 +54,26 @@ export class GameScene extends Phaser.Scene {
       fontSize: "18px",
       color: "#e0e0e0",
     });
+
+    let savedBest: number | null = null;
+    try {
+      const raw = localStorage.getItem("snakey-best-score");
+      if (raw !== null) {
+        const parsed = parseInt(raw, 10);
+        if (!isNaN(parsed)) savedBest = parsed;
+      }
+    } catch {
+      // localStorage unavailable
+    }
+    this.bestScore = savedBest ?? 0;
+    this.bestScoreText = this.add
+      .text(
+        CANVAS_WIDTH - OFFSET_X,
+        10,
+        savedBest !== null ? `Best: ${savedBest}` : "Best: \u2014",
+        { fontFamily: "monospace", fontSize: "18px", color: "#e0e0e0" }
+      )
+      .setOrigin(1, 0);
 
     this.gameOverText = this.add
       .text(320, 260, "Game Over\nClick or press Space to restart", {
@@ -170,6 +193,7 @@ export class GameScene extends Phaser.Scene {
 
   private die() {
     this.alive = false;
+    this.persistBestScore();
     this.gameOverText.setText("Game Over\nClick or press Space to restart");
     this.gameOverText.setVisible(true);
     this.draw();
@@ -177,9 +201,22 @@ export class GameScene extends Phaser.Scene {
 
   private win() {
     this.alive = false;
+    this.persistBestScore();
     this.gameOverText.setText("You Win!\nClick or press Space to restart");
     this.gameOverText.setVisible(true);
     this.draw();
+  }
+
+  private persistBestScore() {
+    if (this.score > this.bestScore) {
+      this.bestScore = this.score;
+      this.bestScoreText.setText(`Best: ${this.bestScore}`);
+      try {
+        localStorage.setItem("snakey-best-score", String(this.bestScore));
+      } catch {
+        // localStorage unavailable
+      }
+    }
   }
 
   private draw() {
