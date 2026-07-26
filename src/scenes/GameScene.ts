@@ -22,7 +22,7 @@ function samePoint(a: Point, b: Point) {
 
 export class GameScene extends Phaser.Scene {
   private snake: Point[] = [];
-  private food!: Point;
+  private food: Point | null = null;
   private direction!: Point;
   private nextDirection!: Point;
   private moveTimer = 0;
@@ -85,6 +85,11 @@ export class GameScene extends Phaser.Scene {
         if (!this.hitsSnake({ x, y })) free.push({ x, y });
       }
     }
+    if (free.length === 0) {
+      this.food = null;
+      this.win();
+      return;
+    }
     this.food = free[Math.floor(Math.random() * free.length)];
   }
 
@@ -135,7 +140,7 @@ export class GameScene extends Phaser.Scene {
 
     this.snake.unshift(newHead);
 
-    if (samePoint(newHead, this.food)) {
+    if (this.food && samePoint(newHead, this.food)) {
       this.score++;
       this.scoreText.setText(`Score: ${this.score}`);
       this.spawnFood();
@@ -161,6 +166,14 @@ export class GameScene extends Phaser.Scene {
 
   private die() {
     this.alive = false;
+    this.gameOverText.setText("Game Over\nClick or press Space to restart");
+    this.gameOverText.setVisible(true);
+    this.draw();
+  }
+
+  private win() {
+    this.alive = false;
+    this.gameOverText.setText("You Win!\nClick or press Space to restart");
     this.gameOverText.setVisible(true);
     this.draw();
   }
@@ -203,6 +216,7 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawFood(alpha: number) {
+    if (!this.food) return;
     const g = this.graphics;
     g.fillStyle(FOOD_COLOR, alpha);
     g.fillCircle(
