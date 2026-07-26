@@ -64,6 +64,34 @@ function bfs(
   return null;
 }
 
+/** Count reachable cells from start via BFS, avoiding obstacles. */
+function floodFillCount(
+  start: Point,
+  cols: number,
+  rows: number,
+  obstacles: Set<string>,
+): number {
+  if (obstacles.has(key(start))) return 0;
+  const visited = new Set<string>();
+  visited.add(key(start));
+  const queue: Point[] = [start];
+  let count = 1;
+  while (queue.length > 0) {
+    const pos = queue.shift()!;
+    for (const dir of DIRECTIONS) {
+      const next: Point = { x: pos.x + dir.x, y: pos.y + dir.y };
+      const nk = key(next);
+      if (!inBounds(next, cols, rows)) continue;
+      if (obstacles.has(nk)) continue;
+      if (visited.has(nk)) continue;
+      visited.add(nk);
+      queue.push(next);
+      count++;
+    }
+  }
+  return count;
+}
+
 /** Count direction changes along a path. */
 function countTurns(path: Point[]): number {
   if (path.length < 3) return 0;
@@ -102,11 +130,11 @@ interface ScoredDir {
  * Unbeatable entertaining demo-mode AI.
  *
  * Tier 1: Safe food pursuit — find a move that can reach food via BFS
- * while guaranteeing the tail remains reachable for survival.
+ * while guaranteeing enough open space (≥1.2× snake length) for survival.
  * Tie-break for entertainment: prefer shorter paths, wall-hugging, more turns.
  *
- * Tier 2: Survival tail chase — find the move with the longest reachable
- * path to the tail (scenic route). Tie-break: prefer wall-adjacent new-head.
+ * Tier 2: Maximize open space — pick the move with the most reachable cells
+ * via flood fill. Tie-break: prefer wall-adjacent new-head, then closer to food.
  *
  * Fallback: return the first valid move, biased toward food direction.
  */
@@ -124,7 +152,6 @@ export function getAIDirection(
 ): Point {
   const { snake, food, direction } = state;
   const head = snake[0];
-  const tail = snake[snake.length - 1];
 
   // ── Step 1: Collect valid immediate moves ──────────────────────
 
@@ -167,9 +194,10 @@ export function getAIDirection(
       const foodPath = bfs(newHead, food, cols, rows, bodyMinusTail);
       if (foodPath === null) continue;
 
-      // Safety check: can we also reach the tail (retreat path)?
-      const tailPath = bfs(newHead, tail, cols, rows, bodyMinusTail);
-      if (tailPath === null) continue;
+      // Safety check: is there enough open space to survive?
+      // Require at least 1.2× snake length of reachable cells
+      const space = floodFillCount(newHead, cols, rows, bodyMinusTail);
+      if (space < snake.length * 1.2) continue;
 
       tier1.push({
         dir,
@@ -190,34 +218,34 @@ export function getAIDirection(
     }
   }
 
-  // ── Step 3: Tier 2 — Survival Tail Chase ──────────────────────
+  // ── Step 3: Tier 2 — Maximize Open Space ──────────────────────
 
   {
-    const tier2: ScoredDir[] = [];
+    const tier2: { dir: Point; space: number; wallHug: number; foodDist: number }[] = [];
 
     for (const { dir, newHead } of validMoves) {
-      const tailPath = bfs(newHead, tail, cols, rows, bodyMinusTail);
-      if (tailPath === null) continue;
-
+      const space = floodFillCount(newHead, cols, rows, bodyMinusTail);
       tier2.push({
         dir,
-        pathLen: tailPath.length,
-        wallHugs: isWallAdjacent(newHead, cols, rows) ? 1 : 0,
-        turns: 0,
+        space,
+        wallHug: isWallAdjacent(newHead, cols, rows) ? 1 : 0,
+        foodDist: food !== null
+          ? Math.abs(food.x - newHead.x) + Math.abs(food.y - newHead.y)
+          : 0,
       });
     }
 
-    if (tier2.length > 0) {
-      // Prefer LONGEST path to tail (more scenic/entertaining)
-      tier2.sort((a, b) => b.pathLen - a.pathLen);
+    // Sort: most space first, then wall-adjacent for entertainment, then closer to food
+    tier2.sort((a, b) => {
+      if (a.space !== b.space) return b.space - a.space;
+      if (a.wallHug !== b.wallHug) return b.wallHug - a.wallHug;
+      return a.foodDist - b.foodDist;
+    });
 
-      // Among ties, prefer wall-hugging newHead
-      const bestLen = tier2[0].pathLen;
-      const tied = tier2.filter((m) => m.pathLen === bestLen);
-      if (tied.length > 1) {
-        tied.sort((a, b) => b.wallHugs - a.wallHugs);
-      }
-      return tied[0].dir;
+    // Only use Tier 2 if there's a meaningful space difference
+    // (otherwise fall through to fallback which handles dead ends)
+    if (tier2.length > 0 && tier2[0].space > 1) {
+      return tier2[0].dir;
     }
   }
 
