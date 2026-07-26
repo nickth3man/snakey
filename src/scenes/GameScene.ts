@@ -40,8 +40,11 @@ export class GameScene extends Phaser.Scene {
   }
 
   create() {
+    const kb = this.input.keyboard;
+    if (!kb) return;
+
     this.graphics = this.add.graphics();
-    this.cursors = this.input.keyboard!.createCursorKeys();
+    this.cursors = kb.createCursorKeys();
 
     this.scoreText = this.add.text(OFFSET_X, 10, "Score: 0", {
       fontFamily: "monospace",
@@ -60,7 +63,7 @@ export class GameScene extends Phaser.Scene {
       .setVisible(false);
 
     this.input.on("pointerdown", () => this.restartIfDead());
-    this.input.keyboard!.on("keydown-SPACE", () => this.restartIfDead());
+    kb.on("keydown-SPACE", () => this.restartIfDead());
 
     this.startGame();
   }
